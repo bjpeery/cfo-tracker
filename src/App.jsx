@@ -61,9 +61,12 @@ export default function CFOTracker() {
   const [editId,      setEditId]      = useState(null);
   const [saving,      setSaving]      = useState(false);
 
-  const [filter,      setFilter]      = useState("All");
-  const [expandedId,  setExpandedId]  = useState(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [filterPriorities, setFilterPriorities] = useState([]);
+  const [filterStatuses,   setFilterStatuses]   = useState([]);
+  const [sortBy,           setSortBy]           = useState("priority"); // "priority" | "due_date" | "status"
+  const [sortDir,          setSortDir]          = useState("asc");
+  const [expandedId,       setExpandedId]       = useState(null);
+  const [searchQuery,      setSearchQuery]      = useState("");
 
   const [showReminder,   setShowReminder]   = useState(false);
   const [reminder,       setReminder]       = useState(EMPTY_REMINDER);
@@ -234,20 +237,45 @@ export default function CFOTracker() {
   // ── Derived state ───────────────────────────────────────────────────────────
   const criticalCount = projects.filter(p => p.priority === "Critical" && p.status !== "Complete").length;
 
+  function toggleFilter(arr, setArr, val) {
+    setArr(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
+  }
+
+  function clearFilters() {
+    setFilterPriorities([]);
+    setFilterStatuses([]);
+    setSearchQuery("");
+  }
+
+  const activeFilterCount = filterPriorities.length + filterStatuses.length;
+
   const filtered = projects
-    .filter(p => filter === "All" || p.priority === filter || p.status === filter)
+    .filter(p => filterPriorities.length === 0 || filterPriorities.includes(p.priority))
+    .filter(p => filterStatuses.length   === 0 || filterStatuses.includes(p.status))
     .filter(p => {
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
       return (
         p.title.toLowerCase().includes(q) ||
-        (p.notes     || "").toLowerCase().includes(q) ||
-        (p.partners  || "").toLowerCase().includes(q)
+        (p.notes    || "").toLowerCase().includes(q) ||
+        (p.partners || "").toLowerCase().includes(q)
       );
     })
     .sort((a, b) => {
-      const pri = PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority);
-      return pri !== 0 ? pri : new Date(a.due_date) - new Date(b.due_date);
+      const dir = sortDir === "asc" ? 1 : -1;
+      if (sortBy === "priority") {
+        const diff = PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority);
+        return diff !== 0 ? diff * dir : new Date(a.due_date) - new Date(b.due_date);
+      }
+      if (sortBy === "due_date") {
+        const da = a.due_date ? new Date(a.due_date) : new Date("9999-12-31");
+        const db = b.due_date ? new Date(b.due_date) : new Date("9999-12-31");
+        return (da - db) * dir;
+      }
+      if (sortBy === "status") {
+        const diff = STATUS_OPTIONS.indexOf(a.status) - STATUS_OPTIONS.indexOf(b.status);
+        return diff !== 0 ? diff * dir : PRIORITIES.indexOf(a.priority) - PRIORITIES.indexOf(b.priority);
+      }
     });
 
   const inputSt = {
@@ -317,36 +345,97 @@ export default function CFOTracker() {
         </div>
       </div>
 
-      {/* SEARCH + FILTERS */}
-      <div style={{ padding: "16px 40px 0", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ position: "relative", flex: "0 0 260px" }}>
-          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#444", fontSize: 13 }}>⌕</span>
-          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search titles, notes, partners…"
-            style={{ ...inputSt, paddingLeft: 32, fontSize: 12, height: 36, border: "1px solid #2A2A2F" }} />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: 12, padding: 0 }}>✕</button>
-          )}
+      {/* SEARCH + FILTERS + SORT */}
+      <div style={{ padding: "16px 40px 0" }}>
+
+        {/* Row 1: search + sort + count */}
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+          <div style={{ position: "relative", flex: "0 0 260px" }}>
+            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#444", fontSize: 13 }}>⌕</span>
+            <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search titles, notes, partners…"
+              style={{ ...inputSt, paddingLeft: 32, fontSize: 12, height: 36, border: "1px solid #2A2A2F" }} />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: 12, padding: 0 }}>✕</button>
+            )}
+          </div>
+
+          {/* Sort controls */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#444", letterSpacing: 1, textTransform: "uppercase" }}>Sort</span>
+            {[
+              { key: "priority", label: "Priority" },
+              { key: "due_date", label: "Due Date" },
+              { key: "status",   label: "Status"   },
+            ].map(opt => (
+              <button key={opt.key} onClick={() => {
+                if (sortBy === opt.key) setSortDir(d => d === "asc" ? "desc" : "asc");
+                else { setSortBy(opt.key); setSortDir("asc"); }
+              }} style={{
+                background: sortBy === opt.key ? "#1E1E22" : "transparent",
+                color: sortBy === opt.key ? "#E8E4DC" : "#555",
+                border: `1px solid ${sortBy === opt.key ? "#3A3A3F" : "#2A2A2F"}`,
+                borderRadius: 6, padding: "5px 11px",
+                fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1,
+                textTransform: "uppercase", cursor: "pointer", transition: "all 0.15s",
+                display: "flex", alignItems: "center", gap: 4,
+              }}>
+                {opt.label}
+                {sortBy === opt.key && (
+                  <span style={{ fontSize: 9 }}>{sortDir === "asc" ? "↑" : "↓"}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+            {(activeFilterCount > 0 || searchQuery) && (
+              <button onClick={clearFilters} style={{ background: "none", border: "none", color: "#555", fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1, cursor: "pointer", textDecoration: "underline", textTransform: "uppercase" }}>
+                Clear filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+              </button>
+            )}
+            <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#333", letterSpacing: 1 }}>
+              {filtered.length} / {projects.length}
+            </span>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {["All", ...PRIORITIES, ...STATUS_OPTIONS].map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{
-              background: filter === f ? "#E8E4DC" : "transparent",
-              color:      filter === f ? "#0C0C0E"  : "#555",
-              border: `1px solid ${filter === f ? "#E8E4DC" : "#2A2A2F"}`,
-              borderRadius: 20, padding: "4px 13px",
-              fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1,
-              textTransform: "uppercase", cursor: "pointer", transition: "all 0.15s",
-            }}>{f}</button>
-          ))}
+
+        {/* Row 2: priority + status multi-filters */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#444", letterSpacing: 1, textTransform: "uppercase", marginRight: 2 }}>Filter</span>
+          {PRIORITIES.map(p => {
+            const pc      = PRIORITY_CONFIG[p];
+            const active  = filterPriorities.includes(p);
+            return (
+              <button key={p} onClick={() => toggleFilter(filterPriorities, setFilterPriorities, p)} style={{
+                background: active ? pc.bg : "transparent",
+                color:      active ? pc.color : "#555",
+                border:     `1px solid ${active ? pc.color : "#2A2A2F"}`,
+                borderRadius: 20, padding: "4px 13px",
+                fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1,
+                textTransform: "uppercase", cursor: "pointer", transition: "all 0.15s",
+              }}>{p}</button>
+            );
+          })}
+          <span style={{ width: 1, height: 16, background: "#2A2A2F", margin: "0 4px" }} />
+          {STATUS_OPTIONS.map(s => {
+            const active = filterStatuses.includes(s);
+            return (
+              <button key={s} onClick={() => toggleFilter(filterStatuses, setFilterStatuses, s)} style={{
+                background: active ? "#1E1E22" : "transparent",
+                color:      active ? "#E8E4DC" : "#555",
+                border:     `1px solid ${active ? "#3A3A3F" : "#2A2A2F"}`,
+                borderRadius: 20, padding: "4px 13px",
+                fontFamily: "'DM Mono', monospace", fontSize: 9, letterSpacing: 1,
+                textTransform: "uppercase", cursor: "pointer", transition: "all 0.15s",
+              }}>{s}</button>
+            );
+          })}
         </div>
-        <span style={{ marginLeft: "auto", fontFamily: "'DM Mono', monospace", fontSize: 9, color: "#333", letterSpacing: 1 }}>
-          {filtered.length} / {projects.length}
-        </span>
       </div>
 
       {/* PROJECT LIST */}
-      <div style={{ padding: "14px 40px 0" }}>
+      <div style={{ padding: "12px 40px 0" }}>
         {filtered.length === 0 && (
           <div style={{ textAlign: "center", padding: "60px 0", color: "#2A2A2F", fontFamily: "'DM Mono', monospace", fontSize: 12, letterSpacing: 2 }}>
             {searchQuery ? `NO RESULTS FOR "${searchQuery.toUpperCase()}"` : "NO PROJECTS LOGGED YET"}
