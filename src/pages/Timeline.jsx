@@ -60,10 +60,13 @@ export default function Timeline({ projects }) {
         ) : (
           <div style={{ background:"#111114",border:"1px solid #1E1E22",borderRadius:12,overflow:"hidden" }}>
             {/* Month header */}
-            <div style={{ position:"relative",height:30,borderBottom:"1px solid #1E1E22",background:"#0D0D10" }}>
-              {weekLines.map(w=><div key={w} style={{ position:"absolute",left:`${pct(w)}%`,top:0,bottom:0,width:1,background:"#18181C" }} />)}
-              {months.map(m=><div key={m.label} style={{ position:"absolute",left:`${pct(m.offset)}%`,top:0,bottom:0,display:"flex",alignItems:"center",paddingLeft:8 }}><span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,color:"#444",letterSpacing:1,textTransform:"uppercase",whiteSpace:"nowrap" }}>{m.label}</span></div>)}
-              <div style={{ position:"absolute",left:"0%",top:0,bottom:0,width:2,background:"#E8E4DC",opacity:0.5 }} />
+            <div style={{ display:"flex",height:30,borderBottom:"1px solid #1E1E22",background:"#0D0D10" }}>
+              <div style={{ width:190,flexShrink:0,borderRight:"1px solid #1E1E22" }} />
+              <div style={{ flex:1,position:"relative" }}>
+                {weekLines.map(w=><div key={w} style={{ position:"absolute",left:`${pct(w)}%`,top:0,bottom:0,width:1,background:"#18181C" }} />)}
+                {months.map(m=><div key={m.label} style={{ position:"absolute",left:`${pct(m.offset)}%`,top:0,bottom:0,display:"flex",alignItems:"center",paddingLeft:8 }}><span style={{ fontFamily:"'DM Mono',monospace",fontSize:8,color:"#555",letterSpacing:1,textTransform:"uppercase",whiteSpace:"nowrap" }}>{m.label}</span></div>)}
+                <div style={{ position:"absolute",left:"0%",top:0,bottom:0,width:2,background:"#E8E4DC",opacity:0.5 }} />
+              </div>
             </div>
 
             {/* Rows */}
