@@ -15,7 +15,14 @@ export const EMPTY_FORM = {
   is_recurring: false, recurrence_rule: "weekly", recurrence_end: "",
 };
 
+export const EMPTY_TASK = {
+  title: "", due_date: "", priority: "High", assignee: "",
+  project_id: "", complete: false, sort_order: 0,
+};
+
 export const EMPTY_REMINDER = { project_id: null, email: "", days_before: 3 };
+
+export const DAY_TO_DAY_TITLE = "Day-to-Day";
 
 export const INPUT_STYLE = {
   width: "100%", background: "#0C0C0E", border: "1px solid #2A2A2F",
@@ -38,55 +45,48 @@ export function fmtDateTime(isoStr) {
   return new Date(isoStr).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-// Generate recurring project instances from a template
+export function getTaskProgress(tasks) {
+  if (!tasks || tasks.length === 0) return { complete: 0, total: 0, pct: 0 };
+  const complete = tasks.filter(t => t.complete).length;
+  return { complete, total: tasks.length, pct: Math.round((complete / tasks.length) * 100) };
+}
+
 export function generateRecurringInstances(template, rule, endDate) {
   const instances = [];
   const end = new Date(endDate);
   end.setHours(23, 59, 59);
-
   let cursor = template.start_date ? new Date(template.start_date) : new Date();
   cursor.setHours(0, 0, 0, 0);
-
   const durationDays = template.start_date && template.due_date
     ? Math.ceil((new Date(template.due_date) - new Date(template.start_date)) / 86400000)
     : 7;
-
   let index = 1;
   while (cursor <= end) {
     const start = new Date(cursor);
     const due   = new Date(cursor.getTime() + durationDays * 86400000);
-
     instances.push({
-      title:      `${template.title} ${getInstanceSuffix(rule, start, index)}`,
+      title: `${template.title} ${getInstanceSuffix(rule, start, index)}`,
       start_date: start.toISOString().split("T")[0],
       due_date:   due.toISOString().split("T")[0],
-      priority:   template.priority,
-      partners:   template.partners,
-      notes:      template.notes,
-      status:     "In Progress",
-      is_recurring: true,
-      recurrence_rule: rule,
+      priority: template.priority, partners: template.partners,
+      notes: template.notes, status: "In Progress",
+      is_recurring: true, recurrence_rule: rule,
     });
-
-    // Advance cursor
     if (rule === "weekly")      cursor.setDate(cursor.getDate() + 7);
     else if (rule === "biweekly") cursor.setDate(cursor.getDate() + 14);
     else if (rule === "monthly")  cursor.setMonth(cursor.getMonth() + 1);
     else if (rule === "quarterly") cursor.setMonth(cursor.getMonth() + 3);
     else break;
-
     index++;
   }
   return instances;
 }
 
 function getInstanceSuffix(rule, date, index) {
-  if (rule === "weekly" || rule === "biweekly") {
+  if (rule === "weekly" || rule === "biweekly")
     return `— Wk of ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
-  }
-  if (rule === "monthly") {
+  if (rule === "monthly")
     return `— ${date.toLocaleDateString("en-US", { month: "short", year: "numeric" })}`;
-  }
   if (rule === "quarterly") {
     const q = Math.floor(date.getMonth() / 3) + 1;
     return `— Q${q} ${date.getFullYear()}`;
