@@ -182,6 +182,12 @@ export default function Projects({ projects, setProjects, tasks, setTasks, remin
     setTaskNotes(n => { const copy={...n}; delete copy[id]; return copy; });
   }
 
+  async function reassignTask(taskId, newProjectId) {
+    const pid = newProjectId === "" ? null : newProjectId;
+    await supabase.from("tasks").update({ project_id: pid, updated_at: new Date().toISOString() }).eq("id", taskId);
+    setTasks(ts => ts.map(t => t.id === taskId ? { ...t, project_id: pid } : t));
+  }
+
   async function toggleTaskComplete(task) {
     const complete = !task.complete;
     await supabase.from("tasks").update({ complete, updated_at: new Date().toISOString() }).eq("id", task.id);
@@ -361,6 +367,64 @@ export default function Projects({ projects, setProjects, tasks, setTasks, remin
 
       {/* Project list */}
       <div style={{ padding:"0 32px" }}>
+        {/* Unassigned tasks section */}
+        {(()=>{
+          const unassigned = tasks.filter(t => !t.project_id).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+          if (unassigned.length === 0) return null;
+          return (
+            <div style={{ background:"#111114",border:"1px solid #F5C84233",borderLeft:"3px solid #F5C842",borderRadius:10,marginBottom:8 }}>
+              <div style={{ padding:"12px 16px",display:"flex",alignItems:"center",gap:12 }}>
+                <span style={{ fontSize:14 }}>📥</span>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontWeight:600,fontSize:13,color:"#F5C842" }}>Unassigned Tasks</div>
+                  <div style={{ fontFamily:"'DM Mono',monospace",fontSize:9,color:"#555",marginTop:2 }}>{unassigned.length} task{unassigned.length!==1?"s":""} not yet assigned to a project</div>
+                </div>
+              </div>
+              <div style={{ padding:"0 16px 12px 16px",borderTop:"1px solid #1E1E22" }}>
+                {unassigned.map((t,ti)=>{
+                  const tpc=PRIORITY_CONFIG[t.priority];
+                  const tNotes=taskNotes[t.id];
+                  const tNotesExpanded=expandedNoteId===t.id;
+                  return (
+                    <div key={t.id} style={{ background:"#0D0D10",border:"1px solid #1E1E22",borderRadius:8,marginBottom:5,marginTop:ti===0?8:0 }}>
+                      <div style={{ padding:"9px 12px",display:"flex",alignItems:"center",gap:10 }}>
+                        <div onClick={()=>toggleTaskComplete(t)} style={{ width:16,height:16,borderRadius:4,border:`1.5px solid ${t.complete?"#4ECDC4":"#2A2A2F"}`,background:t.complete?"#4ECDC422":"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s" }}>
+                          {t.complete&&<span style={{ color:"#4ECDC4",fontSize:10,lineHeight:1 }}>✓</span>}
+                        </div>
+                        <div style={{ flex:1,minWidth:0 }}>
+                          <div style={{ fontSize:12,fontWeight:500,color:t.complete?"#444":"#E8E4DC",textDecoration:t.complete?"line-through":"none",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{t.title}</div>
+                          {t.assignee&&<div style={{ fontFamily:"'DM Mono',monospace",fontSize:9,color:"#3A3A3F",marginTop:1 }}>{t.assignee}</div>}
+                        </div>
+                        <div style={{ display:"flex",alignItems:"center",gap:6,flexShrink:0 }}>
+                          <PriorityBadge priority={t.priority} />
+                          <DueBadge date={t.due_date} />
+                          {/* Reassign dropdown */}
+                          <select
+                            value=""
+                            onChange={e=>reassignTask(t.id, e.target.value)}
+                            style={{ background:"#1A1A1E",border:"1px solid #F5C84244",borderRadius:6,color:"#F5C842",fontFamily:"'DM Mono',monospace",fontSize:8,letterSpacing:1,padding:"3px 6px",cursor:"pointer",textTransform:"uppercase" }}
+                          >
+                            <option value="" disabled>Assign →</option>
+                            {projects.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
+                          </select>
+                          <button onClick={()=>openEditTask(t)} style={{ background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:10,padding:"0 3px" }}>✎</button>
+                          <button onClick={()=>{ if(tNotesExpanded){setExpandedNoteId(null);}else{setExpandedNoteId(t.id);if(!tNotes)fetchTaskNotes(t.id);} }} style={{ background:"none",border:"none",color:tNotesExpanded?"#F5C842":"#444",cursor:"pointer",fontSize:10,padding:"0 3px" }}>💬</button>
+                          <button onClick={()=>handleDeleteTask(t.id)} style={{ background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:10,padding:"0 3px" }}>✕</button>
+                        </div>
+                      </div>
+                      {tNotesExpanded&&(
+                        <div style={{ padding:"0 12px 10px 12px",borderTop:"1px solid #181818" }}>
+                          <TaskNoteThread notes={tNotes||[]} taskId={t.id} session={session} onAdd={addTaskNote} onDelete={deleteTaskNote} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+
         {filteredProjects.length===0&&<div style={{ textAlign:"center",padding:"60px 0",color:"#2A2A2F",fontFamily:"'DM Mono',monospace",fontSize:11,letterSpacing:2 }}>NO PROJECTS FOUND</div>}
         {filteredProjects.map((p,i)=>{
           const pc          = PRIORITY_CONFIG[p.priority];
@@ -463,6 +527,17 @@ export default function Projects({ projects, setProjects, tasks, setTasks, remin
                                     <button onClick={()=>moveTask(p.id,t.id,"up")} disabled={ti===0} style={{ background:"none",border:"none",color:ti===0?"#1E1E22":"#444",cursor:ti===0?"default":"pointer",fontSize:9,padding:"0 2px",lineHeight:1 }}>▲</button>
                                     <button onClick={()=>moveTask(p.id,t.id,"down")} disabled={ti===projTasks.length-1} style={{ background:"none",border:"none",color:ti===projTasks.length-1?"#1E1E22":"#444",cursor:ti===projTasks.length-1?"default":"pointer",fontSize:9,padding:"0 2px",lineHeight:1 }}>▼</button>
                                   </div>
+                                  {/* Reassign dropdown */}
+                                  <select
+                                    value={t.project_id||""}
+                                    onChange={e=>reassignTask(t.id, e.target.value)}
+                                    onClick={e=>e.stopPropagation()}
+                                    style={{ background:"#1A1A1E",border:"1px solid #2A2A2F",borderRadius:6,color:"#555",fontFamily:"'DM Mono',monospace",fontSize:8,letterSpacing:1,padding:"3px 6px",cursor:"pointer",maxWidth:90 }}
+                                  >
+                                    <option value="" disabled>Move →</option>
+                                    {projects.filter(proj=>proj.id!==p.id).map(proj=><option key={proj.id} value={proj.id}>{proj.title}</option>)}
+                                    <option value="">Unassign</option>
+                                  </select>
                                   {/* Task actions */}
                                   <button onClick={()=>openEditTask(t)} style={{ background:"none",border:"none",color:"#444",cursor:"pointer",fontSize:10,padding:"0 3px" }}>✎</button>
                                   <button onClick={()=>{ if(tNotesExpanded){setExpandedNoteId(null);}else{setExpandedNoteId(t.id);if(!tNotes)fetchTaskNotes(t.id);} }} style={{ background:"none",border:"none",color:tNotesExpanded?"#F5C842":"#444",cursor:"pointer",fontSize:10,padding:"0 3px" }}>💬</button>
